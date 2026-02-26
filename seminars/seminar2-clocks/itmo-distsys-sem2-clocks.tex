@@ -1,0 +1,605 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+\usepackage{minted}
+% sudo tlmgr install minted
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[russian,english]{babel}
+
+% Footline: show current section (left) and frame numbers (right)
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.78\paperwidth,ht=2.5ex,dp=1ex,left]{author in head/foot}%
+      \hspace*{1em}\usebeamerfont{footline}\insertsectionhead%
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.22\paperwidth,ht=2.5ex,dp=1ex,right]{date in head/foot}%
+      \usebeamerfont{footline}\insertframenumber{} / \inserttotalframenumber\hspace*{1em}%
+    \end{beamercolorbox}%
+  }%
+}
+
+\newcommand{\parpause}[1]{\only<+->{#1\par}}
+
+\AtBeginSection[]
+{
+  \begin{frame}
+    \frametitle{Содержание}
+    \tableofcontents[currentsection]
+  \end{frame}
+}
+
+\title{Семинар 2. Часы и время в распределенных системах}
+\subtitle{Распределенные вычисления}
+\author{Георгий Семенов}
+\institute{Институт прикладных компьютерных наук \\ Университет ИТМО}
+\date{весна 2026}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Организационные моменты}
+
+\begin{itemize}
+  \item Материалы семинаров и домашек появились на GitHub
+  \item Есть вероятность, что первая домашка будет посвящена часам! (о них – сегодня)
+\end{itemize}
+
+\end{frame}
+
+\section{(!) Ликбез навстречу Docker и Linux}
+
+\begin{frame}
+\frametitle{Как исполняется программа в ОС?}
+
+\begin{itemize}
+	\item Операционная система – управляет ресурсами вычислительного узла и предоставляет API {\itshape системных вызовов} для программ
+	\begin{itemize}
+        \item Поток – единица диспетчеризации для разделения CPU (int main())
+        \item Виртуальная память – пространство динамически выделяемой памяти RAM (+swap) для программы (malloc/free)
+        \item Сокет (ip + порт) – канал для обмена данными в рамках I/O
+    \end{itemize}
+    {\pause
+    \item Что происходит, когда мы запускаем программу в Linux?
+	\begin{itemize}
+        \item Создание подпроцесса (fork) – рождение нового PID как копии родительского процесса
+        \item Загрузка исполняемого файла в RAM для нового процесса (exec, секции ELF)
+        \item При этом был резервирована память под stack, а динамическая память (heap) будет выделяться по мере необходимости с помощью системных вызовов
+        \item Работа с памятью файлами, динамическими библиотеками, сокетами и т.п. – все через системные вызовы ОС (calling conventions)
+    \end{itemize}
+    }
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Какие неявные зависимости есть у программы?}
+
+\begin{itemize}
+	\item Порядок сборки – библиотеки, пакеты, интерфейсы и API ОС
+	\item Исполняющая среда – непосредственно ОС, виртуальная машина, интерпретатор и т.п.
+	\item Файлы, появляющиеся в процессе работы программы
+	\begin{itemize}
+        \item Stateful файлы – конфигурация, данные и т.п.
+        \item Временные и мусорные файлы – AppData, /tmp, ~/.cache и т.п.
+    \end{itemize}
+    \item Сетевое окружение
+    \begin{itemize}
+        \item Открытые порты (сокеты) и их forwarding наружу
+        \item Доступные IP-адреса сторонних сервисов и способ их адресации с помощью DNS
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Что такое Docker и зачем он нужен?}
+
+Docker – платформа для исполнения приложений в изолированных {\itshape контейнерах}.
+
+\begin{itemize}
+	\item Файл Dockerfile – декларативное описание процесса сборки образа (image) для контейнера
+	\item В результате сборки образа по Dockerfile мы получаем {\itshape образ} (image), или несколько образов в случае multi-stage
+    \item Мы можем запустить контейнер на основе образа, указывая дополнительные параметры:
+    \begin{itemize}
+        \item Отображение портов внутри контейнера на порты хоста (forwarding)
+        \item Режимы сети (host, bridge, none) для обеспечения сетевой связности между контейнерам, хостом и внешним миром
+        \item Volumes – можно примонтировать директории на хосте внутрь контейнера для обмена данными между ними (данные не удалятся, когда контейнер будет удален)
+        \item Переменные окружения (environment) для передачи конфигурации внутрь контейнера
+    \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример Dockerfile}
+
+\begin{minted}[escapeinside=||]{dockerfile}
+# ARG - Use build-time variables.
+ARG RELEASE
+# LABEL - Add metadata to an image.
+LABEL org.opencontainers.image.ref.name=ubuntu
+# ADD - Add local or remote files and directories.
+ADD file ... in /
+# CMD - Specify default commands.
+CMD ["/bin/bash"] # Specify default commands.
+# ENV - Set environment variables.
+ENV JAVA_HOME=/opt/java/openjdk
+# RUN - Execute build commands.
+RUN /bin/sh -c set -eux;
+# COPY - Copy files and directories.
+COPY --chmod=755 entrypoint.sh /__cacert_entrypoint.sh
+# ENTRYPOINT - Specify default executable.
+ENTRYPOINT ["/__cacert_entrypoint.sh"]
+\end{minted}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример Dockerfile (продолжение)}
+
+\begin{minted}[escapeinside=||]{dockerfile}
+# CMD - Specify default commands.
+CMD ["jshell"]
+# EXPOSE - Describe which ports your application is listening on.
+EXPOSE [25565/tcp]
+# VOLUME - Create volume mounts.
+VOLUME [/data]
+# WORKDIR - Change working directory,
+WORKDIR /data
+# STOPSIGNAL - Specify the system call signal for exiting a container.
+STOPSIGNAL SIGTERM
+# HEALTHCHECK - Check a container's health on startup.
+HEALTHCHECK &{["CMD-SHELL" "mc-health"] "30s" "0s"
+\end{minted}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Как собрать образ и запустить контейнер?}
+
+\begin{minted}[escapeinside=||]{bash}
+# . - директория, где лежит Dockerfile, т.е. текущая
+docker build -t minecraft-server .
+
+# посмотреть локальные образы
+docker image ls
+
+# -d - запуск в фоновом режиме (detached)
+# -p - port forwarding: отображаем порт 25565 на хост
+docker run -d -p 127.0.0.1:25565:25565 minecraft-server
+
+# посмотреть контейнеры
+docker ps
+\end{minted}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример docker-compose.yaml}
+
+\begin{minted}[escapeinside=||]{yaml}
+services:
+  minecraft: # название контейнера (сервиса)
+    image: itzg/minecraft-server:latest # имя образа и тэг
+    pull_policy: daily # как часто обновлять образ
+    tty: true
+    stdin_open: true
+    ports: # отображаем внутр. порт 25565 на порт хоста 25565
+      - "25565:25565"
+    environment: # конфигурируем через переменные окружения
+      EULA: "TRUE"
+      VERSION: "1.21.11"
+      SERVER_NAME: "Уютные зимние приключения"
+      DIFFICULTY: normal
+    volumes: # монтируем директорию на хосте внутрь
+             # контейнера для сохранения данных
+      - ./data:/data
+\end{minted}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Как собрать образ и запустить контейнер?}
+
+\begin{minted}[escapeinside=||]{bash}
+# в директории, где лежит docker-compose.yaml
+docker compose up -d
+
+docker compose stop # (1) просто остановим все
+docker compose down # ИЛИ (2): еще и грохнем контейнеры и т.п.
+\end{minted}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Discussion: что для нас Docker?}
+
+\begin{itemize}
+	\item Docker - среда виртуализации для исполнения программ в изолированных контейнерах
+	\item Внутри каждого контейнера запущена своя ОС (обычно Linux)
+	\begin{itemize}
+    \item Ядро ОС резидентно, т.е. должно лежать в оперативной памяти хоста, поэтому важен размер
+    \item Alpine Linux – 5 MB по образу
+  \end{itemize}
+	\item Docker свойственно захватывать ресурсы хоста
+  \begin{itemize}
+    \item RAM - эмулирует виртуальную память для контейнера, выделяя её из общей памяти хоста
+    \item Firewall - Docker управляет iptables в Linux (использовать совместно с ufw - не стоит)
+  \end{itemize}
+  \item Какие плюсы и минусы Docker?
+  \begin{itemize}
+    \item (+) Декларативная абстракция для описания сред для сборки и запуска программ
+    \item (-) Ненулевые издержки на RAM
+  \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Какие свойства мы имеем в виду, говоря о Linux?}
+
+\begin{itemize}
+	\item Свободный, модульный и открытый код ОС и программ (copy-left лицензия GPL)
+	\item Де факто промышленный стандарт: POSIX-совместимость, стандартные C-headers, ELF, .so и т.п.
+	\item Декларативные способы решения задач по системному администрированию (в т.ч. DevOps)
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Что нужно обязательно представлять о Linux?}
+
+\begin{itemize}
+	\item Файловая система в Linux-системах
+  \begin{itemize}
+    \item Все – это файл (включая устройства, сокеты и т.п.)
+    \item Иерархическая структура файловой системы (root, /home, /dev, /proc и т.п.)
+    \item Узлы иерархической структуры - inodes, ссылаются на блоки данных
+    \item Права доступа к файлам: владелец (u), группа (g), остальные (o); чтение (r), запись (w), выполнение (x)
+  \end{itemize}
+  \item Порядок инициализации и управления ОС
+  \begin{itemize}
+    \item Базово о физическом запуске - BIOS/UEFI, загрузчик (GRUB), ядро ОС, init-система (systemd)
+    \item Service в Linux: юнит, который может быть запущен, остановлен, перезапущен и т.п. с помощью systemctl
+    \item Процессы и демоны – top, htop, ps, systemctl status и т.п.
+    \item Пользователи и группы - useradd, groupadd, passwd и т.п.
+  \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Управление доступом к файлам}
+
+\begin{center}
+  \includegraphics[width=0.8\linewidth,keepaspectratio]{images/linuxfilepermissions.png}
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Загрузка сервисов}
+
+\begin{center}
+  \includegraphics[width=1.0\linewidth,keepaspectratio]{images/linuxbootprocess.jpg}
+\end{center}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Упражнения (опциональные)}
+
+\begin{enumerate}
+  \item Создать папку (mkdir, -p) с файлами (touch, nano) и гранулярно настроить права доступа к ним (chmod, chown)
+     под произвольную бизнес-задачу (например, для файлов веб-сервера - менять можем мы, но не он)
+  \item Создать service (service-файл) в Linux, который будет запускаться в качестве демона проверки состояния системы (скрипт на Bash) 
+  и логировать раз в какое-то время результаты в файл (systemctl list-dependencies, status, logs и т.п.)
+  \item Установить Docker, запустить произвольный сервис с помощью docker-compose:
+  \begin{itemize}
+    \item nginx-сервер (проверить можно, открыв в браузере http://localhost:80)
+    \item Postgres (проверить, подключившись через psql, DataGrip и т.п.)
+    \item Minecraft-сервер (проверить можно, если есть игра)
+  \end{itemize}
+\end{enumerate}
+
+\end{frame}
+
+\section{Линейные часы и время в распределенных системах}
+
+\begin{frame}{Время как проблема}
+\begin{itemize}
+\item В распределённой системе нет глобальных часов: разные узлы, разные ядра процессора, разный <<пульс времени>>
+\item Время передачи сообщений в общем случае неизвестно и может быть большим (пример с ping)
+\item Еще хуже – физические часы дрейфуют ($\pm \epsilon$)
+\end{itemize}
+
+\textbf{Вопрос:} как определить, какое событие произошло раньше?
+В идеальном случае хочется:
+
+\begin{itemize}
+\item Монотонность – <<время течет всегда вперед>>
+\item Согласованность – если $a$ произошло до $b$, то $t(a) < t(b)$
+\item Уникальность – разные события имеют различимые метки времени
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Два типа времени}
+\begin{block}{Тотально упорядоченно (total order, linear, wall-clock, linerializble)}
+Любые два события сравнимы $<$: до или после (иррефлексивное, транзитивное, антисимметричное).
+\end{block}
+
+\begin{block}{Частично упорядоченное (partial order, causal, logical, concurrent)}
+Некоторые события несравнимы $<$: до, после или конкурентно (иррефлексивное, транзитивное, антисимметричное).
+\end{block}
+
+Физическое время $\Rightarrow$ тотальный порядок \\
+Причинность $\Rightarrow$ частичный порядок
+
+\end{frame}
+
+
+\begin{frame}{Real-Time Clock}
+
+Модель реального времени (физические часы) – это функция $C(t)$, которая отображает реальное время $t$ в метку времени $C$.
+
+\[
+C(t) = t + \epsilon(t)
+\]
+
+где $\epsilon(t)$ — ошибка.
+
+Два параметра:
+\begin{itemize}
+\item \textbf{Drift} — отклонение скорости (разность тактовой частоты от эталона)
+\item \textbf{Skew} — разница между часами (относительный сдвиг)
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Синхронизация часов}
+\textbf{Cristian's algorithm (1989)}
+\begin{itemize}
+\item Осуществляем Round-Trip с запросом времени
+\item Вычисляем сдвиг как временной сдвиг между клиентом и сервером: $RTT / 2$
+\item В чем недостаток алгоритма? % не монотонное время, наивное предположение о симметричности (и соответственно, времени запроса и ответа) канала
+\end{itemize}
+
+
+\textbf{Berkeley algorithm (1989)}
+\begin{itemize}
+\item Делегируем быть <<часовщиком>> одному узлу системы (через leader election)
+\item Как в прошлом алгоритме, собираем и оцениваем время на узлах (включая себя) через Round-Trip
+\item Усредняем и сообщаем всем узлам, какой offset им надо к себе прибавить
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{NTP}
+Network Time Protocol – семейство алгоритмов с поддержкой масштабируемости:
+
+\begin{itemize}
+\item Round-Trip с оценкой корректировки (алгоритм Marzullo)
+\item Иерархия страт (stratum 0 – эталонные часы)
+\item Точность – миллисекунды (Интернет), микросекунды (LAN)
+\end{itemize}
+
+\begin{center}
+  \includegraphics[width=0.5\linewidth,keepaspectratio]{images/NTP.png}
+\end{center}
+
+\end{frame}
+
+\begin{frame}{Monotonic Clock}
+Требование:
+
+\[
+t_2 > t_1 \Rightarrow C(t_2) \ge C(t_1)
+\]
+
+
+Используется для:
+\begin{itemize}
+\item измерения интервалов
+\item таймаутов
+\item backoff
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Модель времени в C++}
+\texttt{std::chrono::system\_clock}
+\begin{itemize}
+\item отражает wall-clock
+\item может изменяться назад
+\end{itemize}
+
+
+\texttt{std::chrono::steady\_clock}
+\begin{itemize}
+\item монотонный
+\item не связан с календарным временем
+\item не гарантирована синхронизация между машинами
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{TrueTime (Google Spanner)}
+Идея:
+
+\[
+TT.now() = [earliest, latest]
+\]
+
+Время задаётся интервалом неопределённости.
+
+Позволяет:
+\begin{itemize}
+\item обеспечить внешнюю консистентность
+\item реализовать commit-wait
+\end{itemize}
+\end{frame}
+
+\section{Частично упорядоченное время и логические часы}
+
+\begin{frame}{Lamport (1978)}
+Статья:
+\textit{Time, Clocks, and the Ordering of Events in a Distributed System}
+
+Главная идея:
+\begin{center}
+\textbf{Время = причинность}
+\end{center}
+
+\begin{center}
+  \includegraphics[width=0.8\linewidth,keepaspectratio]{images/lamport_time_paper.png}
+\end{center}
+
+\end{frame}
+
+\begin{frame}{Отношение happens-before}
+Определение:
+
+$a \rightarrow b$, если:
+
+\begin{enumerate}
+\item События в одном процессе и $a$ раньше $b$
+\item $a$ — отправка, $b$ — получение сообщения
+\item Транзитивность
+\end{enumerate}
+
+\begin{block}{Тотально упорядоченное время}
+\[
+    t(a) < t(b) \Leftrightarrow a \rightarrow b
+\]
+\end{block}
+
+\begin{block}{Частично упорядоченное время}
+\[
+    t(a) < t(b) \Rightarrow a \rightarrow b
+\]
+\end{block}
+
+\end{frame}
+
+
+\begin{frame}{Часы Лампорта}
+
+  Интуиция:
+  \begin{itemize}
+    \item "ничто на Земле не проходит бесследно"
+    \item если произошло $B$, и $A$ happens-before $B$, то это должно привести к <<утечке>> времени, т.е. $L(A) < L(B)$
+  \end{itemize}
+
+  % Иными словами, существует два фундаментальных типа событий, отражающих отношение happens-before:
+  % \begin{itemize}
+  %   \item Создание события внутри одного процесса (на нем тотальное время)
+  %   \item Отправка и получение сообщения между процессами (передача события)
+  % \end{itemize}
+
+Алгоритм для каждого процесса $P$ с локальной переменной $C$:
+
+\begin{enumerate}
+
+\item Когда хочу создать событие:
+  \begin{itemize}
+    \item Добавлю в событие метку, соответствующую моим текущим часам: $L := C$
+    \item Атомарно инкрементирую свои часы на единицу: $C := C + 1$
+  \end{itemize}
+
+\item Когда получаю чужое событие:
+  \begin{itemize}
+    \item Обновляю свои часы: $C := \max(C, C_m) + 1$
+  \end{itemize}
+
+\end{enumerate}
+\end{frame}
+
+
+\begin{frame}{Иллюстрация часов Лампорта}
+% https://dis.dankook.ac.kr/lectures/dms16/2016/05/21/lamport-vs-vector-clock/
+
+\begin{center}
+  \includegraphics[width=1.0\linewidth,keepaspectratio]{images/Lamport-Clock-Timestamp.png}
+\end{center}
+
+\end{frame}
+
+
+\begin{frame}{Векторные часы}
+Каждый процесс хранит вектор размера $N$ с текущей известной меткой времени, происходящего
+на каждом из процессов:
+
+\begin{enumerate}
+
+\item Когда хочу создать событие:
+  \begin{itemize}
+    \item Добавлю в событие метку, соответствующую моим текущим часам: $L := C[i]$
+    \item Атомарно инкрементирую свои часы на единицу: $C[i] := C[i] + 1$
+  \end{itemize}
+
+\item Когда получаю чужое событие:
+  \begin{itemize}
+    \item Обновляю свои часы: $\forall j: C[j] := \max(C[j], C_m[j])$
+    \item Атомарно инкрементирую свои часы на единицу: $C[i] := C[i] + 1$
+  \end{itemize}
+\end{enumerate}
+
+\end{frame}
+
+
+\begin{frame}{Иллюстрация векторных часов}
+% https://dis.dankook.ac.kr/lectures/dms16/2016/05/21/lamport-vs-vector-clock/
+
+\begin{center}
+  \includegraphics[width=1.0\linewidth,keepaspectratio]{images/Vector-Clock-Timestamps.png}
+\end{center}
+
+\end{frame}
+
+\begin{frame}{Минимальность}
+
+Векторные часы — минимальное точное представление
+частичного порядка в общем случае (Charron-Bost, "Concerning the size of clocks", 1990)
+
+\begin{itemize}
+\item Causal consistency
+\item CRDT
+\item Отслеживание конфликтов
+\item Distributed debugging
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Итоги}
+\begin{itemize}
+\item Время – то, что позволяет нам рассуждать о событиях внутри распределенной системы
+\item В зависимости от порядка событий мы можем говорить о разных состояниях системы
+\item Физическое время – привычно нам, но оно не обладает монотонностью
+\item Логическое время – относительная конструкция, но с ней можно рассуждать о причинности
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Блогопосты, чтобы разобраться лучше}
+\begin{enumerate}
+\item \href{https://sookocheff.com/post/time/lamport-clock/}{Kevin Sookocheff. Lamport Clocks}
+\item \href{https://martinfowler.com/articles/patterns-of-distributed-systems/lamport-clock.html}{Martin Fowler. Lamport Clocks}
+\item \href{https://www.geeksforgeeks.org/dsa/lamports-logical-clock/}{GeeksforGeeks. Lamport's Logical Clock}
+\item \href{https://mwhittaker.github.io/blog/lamports_logical_clocks/}{Michael Whittaker. Lamport's Logical Clocks}
+\item \href{https://sookocheff.com/post/time/vector-clocks/}{Kevin Sookocheff. Vector Clocks}
+\item \href{https://medium.com/@balrajasubbiah/lamport-clocks-and-vector-clocks-b713db1890d7}{Balraja Subbiah. Lamport Clocks and Vector Clocks}
+\end{enumerate}
+\end{frame}
+
+
+\end{document}
