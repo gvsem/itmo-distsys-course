@@ -24,7 +24,7 @@
 
 | № | Тема | Ссылка | Дедлайн |
 | --- | --- | --- | --- |
-| 1 | Часы и время | [Classroom](https://classroom.github.com/a/2Hn4JBFN]) | 23:59 19.03.2026 |
+| 1 | Часы и время | https://classroom.github.com/a/2Hn4JBFN | 23:59 19.03.2026 |
 | 2 | TBA | | | 
 | 3 | TBA | | | 
 | 4 | TBA | | | 
