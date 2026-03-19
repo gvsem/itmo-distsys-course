@@ -9,6 +9,8 @@
 
 > - [Y. Saito, M. Shapiro – Optimistic replication](https://dl.acm.org/doi/abs/10.1145/1057977.1057980)
 
+> - [G. DeCandia et al. – Dynamo: Amazon’s Highly Available Key-value Store](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) (DynamoDB and Amazon Cart)
+
 > - [M. Kleppmann et al. – Local-first software: you own your data, in spite of the cloud](https://doi.org/10.1145/3359591.3359737) (Local-first манифест)
 
 > - [W. Vogels – Eventually consistent](https://doi.org/10.1145/1435417.1435432)
@@ -59,7 +61,9 @@
 
 - Консенсус. Консенсусное число. Кворум. Выбор лидера. Атомарная рассылка. PAXOS, RAFT.
 
-- Оптимистическая и пессимистическая репликация. Глобальная блокировка, распределенная блокировка, optimistic conccurrency control. Операциональные преобразования (OT). Бесконфликтно реплицируемые типы данных (CRDT).
+- Оптимистическая и пессимистическая репликация. Глобальная блокировка, распределенная блокировка, optimistic conccurrency control.
+
+- Операциональные преобразования (OT). Бесконфликтно реплицируемые типы данных (CRDT). CALM-теорема. G-Set, MV-Register, PN-Counter. RGA, Logoot, WOOT. Современные текстовые типы: FugueMax, Chronofold. Библиотека Automerge.
 
 - Модель согласованности: строгая, слабая, в конечном счете, сессионная. Сильная конечная согласованность.
 
@@ -75,3 +79,29 @@
 - Инфраструктура больших данных и стриминг: MapReduce, Hadoop, Spark, YTsaurus
 
 [список будет дополняться...]
+
+### Блогопосты
+
+- [Lars Huppel - An introduction to Conflict-Free Replicated Data Types](https://lars.hupel.info/topics/crdt/03-lattices/)
+
+- [16 Replication Concepts Every Software Engineer Should Know](https://designgurus.substack.com/p/16-replication-concepts-every-software)
+
+### Другие курсы по распределенным системам
+
+- [Cloud Computing and Distributed Systems](https://onlinecourses.nptel.ac.in/noc26_cs29/preview)
+
+- [M. Kleppmann – Distributed Systems](https://www.cl.cam.ac.uk/teaching/2526/ConcDisSys/dist-sys-notes.pdf)
+
+- [Algorithms and Complexity (Freiburg)](https://ac.informatik.uni-freiburg.de/teaching/ss_21/distributed_systems.php)
+
+- [Distributed Systems](https://www.cs.drexel.edu/~csg63/courses/cs647_sp21.html)
+
+- [Elevify - Distrubuted Systems Course](https://www.elevify.com/en-ng/courses/engineering-construction-and-technology/technology/distributed-systems-course-2a2a5)
+
+- [Distributed Systems (CS 7610)](https://cnitarot.github.io/courses/ds_Fall_2019/index.html)
+
+- [distributedsystemscourse.com](https://www.distributedsystemscourse.com/)
+
+- [An Introduction to Computer Networks](https://intronetworks.cs.luc.edu/1/html/tcp.html)
+
+- [Programming Models for Distributed Computation](https://github.com/heathermiller/dist-prog-book/tree/master)
