@@ -86,6 +86,12 @@
 
 - [16 Replication Concepts Every Software Engineer Should Know](https://designgurus.substack.com/p/16-replication-concepts-every-software)
 
+- [Geeks for Geeks: Introduction to Distributed Systems](https://www.geeksforgeeks.org/computer-networks/what-is-a-distributed-system/)
+
+- [Baeldung: Distributed Systems Guide](https://www.baeldung.com/cs/distributed-systems-guide)
+
+- [Lindsey Kuper: Who invented vector clocks?](https://decomposition.al/blog/2023/04/08/who-invented-vector-clocks/)
+
 ### Другие курсы по распределенным системам
 
 - [Cloud Computing and Distributed Systems](https://onlinecourses.nptel.ac.in/noc26_cs29/preview)
