@@ -1,0 +1,595 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+
+% pdflatex
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[russian,english]{babel}
+\usepackage{cmap}
+% \usepackage{lmodern}
+
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{array}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,backgrounds,calc,decorations.pathreplacing}
+
+% Footline: show current section (left) and frame numbers (right)
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.78\paperwidth,ht=2.5ex,dp=1ex,left]{author in head/foot}%
+      \hspace*{1em}\usebeamerfont{footline}\insertsectionhead%
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.22\paperwidth,ht=2.5ex,dp=1ex,right]{date in head/foot}%
+      \usebeamerfont{footline}\insertframenumber{} / \inserttotalframenumber\hspace*{1em}%
+    \end{beamercolorbox}%
+  }%
+}
+
+\newcommand{\parpause}[1]{\only<+->{#1\par}}
+\newenvironment{definitionbox}[1][Определение]{%
+  \begin{exampleblock}{#1}
+}{%
+  \end{exampleblock}
+}
+
+\AtBeginSection[]
+{
+  \begin{frame}
+    \frametitle{Содержание}
+    \tableofcontents[currentsection]
+  \end{frame}
+}
+
+\title{Семинар 9. Консенсус, RAFT и FLP-теорема}
+\subtitle{Распределенные вычисления}
+\author{Георгий Семенов}
+\institute{Институт прикладных компьютерных наук \\ Университет ИТМО}
+\date{весна 2026}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Организационные моменты}
+
+\begin{itemize}
+  \item Через неделю дедлайн по третьему домашнему заданию
+  \item Проверки 2-го и 3-го домашнего задания проставлю чуть позже в таблицу
+\end{itemize}
+
+\end{frame}
+
+%--------------------------------------------------
+\section{Синхронные и асинхронные распределенные системы}
+
+\begin{frame}
+\frametitle{Синхрония в распределенных системах}
+
+\begin{definitionbox}[Синхронные системы]
+  \begin{itemize}
+    \item Известно, что любое сообщение либо доставляется за некоторое время C, либо полностью исчезает
+    \item Тогда можно разбить выполнение алгоритма на фазы длиной O(C): в начале фазы все процессы отправляют сообщения, потом ждут, а в конце знают, что получили все сообщения, которые только могли прийти
+  \end{itemize}
+\end{definitionbox}
+
+\begin{definitionbox}[Асинхронные системы]
+  \begin{itemize}
+    \item Время передачи сообщения сверху не ограничено
+    \item Но гарантируется, что если нет отказов, то сообщение рано или поздно дойдёт
+  \end{itemize}
+\end{definitionbox}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Как узлы воспринимают время?}
+\begin{columns}[T]
+\column{0.5\textwidth}
+\textbf{Синхронная модель}
+\begin{itemize}
+  \item Задержка сообщений $\leq \delta$ (известно)
+  \item Таймаут $=$ надёжный детектор отказов
+  \item Примеры: real-time системы, авионика самолета
+\end{itemize}
+\vspace{0.5em}
+\textbf{Асинхронная модель}
+\begin{itemize}
+  \item Задержка сообщений --- произвольная
+  \item «Упала нода» $\equiv$ «нода очень медленная»
+  \item Примеры: интернет, облачные кластеры
+\end{itemize}
+
+\column{0.48\textwidth}
+\begin{tikzpicture}[scale=0.82]
+  \draw[-{Stealth},thick] (0,0) -- (5.3,0);
+  \node[font=\footnotesize,align=center] at (0.1,-0.55) {Полностью\\синхронная};
+  \node[font=\footnotesize,align=center] at (5.0,-0.55) {Полностью\\асинхронная};
+  \shade[left color=green!45!white, right color=red!40!white]
+    (0,0.12) rectangle (5,0.52);
+  \draw[thick,blue!70!black] (1.1,0) -- (1.1,0.65)
+    node[above,font=\scriptsize,blue!70!black] {LAN};
+  \draw[thick,orange!80!black] (3.2,0) -- (3.2,0.65)
+    node[above,font=\scriptsize,orange!80!black,align=center] {Интернет};
+  \draw[thick,red!70!black] (4.5,0) -- (4.5,0.65)
+    node[above,font=\scriptsize,red!70!black] {WAN};
+  \draw[decorate,decoration={brace,amplitude=4pt,mirror},thick]
+    (0.4,-1.0) -- (4.6,-1.0);
+  \node[font=\scriptsize,align=center] at (2.5,-1.55)
+    {Частичная синхронность\\{\tiny Dwork, Lynch, Stockmeyer 1988}};
+\end{tikzpicture}
+\vspace{0.5em}
+\begin{alertblock}{}
+\small Реальность $\approx$ \textbf{частичная синхронность}: обычно быстро, но иногда сеть «проваливается»
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+\begin{frame}
+\frametitle{Что может пойти не так? Модели отказов}
+\begin{center}
+\begin{tikzpicture}[
+  lvl/.style={draw, rounded corners=4pt, minimum width=8.2cm,
+              minimum height=0.68cm, align=center, font=\small},
+  scale=0.88, transform shape
+]
+  \node[lvl, fill=green!20]  at (0,3.0)
+    {\textbf{Crash-stop} \quad нода молча останавливается, больше не отвечает};
+  \node[lvl, fill=yellow!35] at (0,2.1)
+    {\textbf{Crash-recovery} \quad упала и восстановилась (с дисковым журналом)};
+  \node[lvl, fill=orange!30] at (0,1.2)
+    {\textbf{Omission} \quad нода работает, но теряет часть сообщений};
+  \node[lvl, fill=red!25]    at (0,0.3)
+    {\textbf{Byzantine} \quad произвольное поведение: ложь, подделка, сговор};
+  \draw[-{Stealth},thick,gray] (6.0,3.4) -- (6.0,-0.1)
+    node[midway,right,font=\footnotesize,gray,align=left] {сложность \\ алгоритма};
+  
+\end{tikzpicture}
+\end{center}
+\vspace{-0.2em}
+\begin{block}{Сегодня}
+Фокус на \textbf{crash-stop}.
+Таймаут --- надёжный детектор отказов \emph{только} в синхронной модели.
+\end{block}
+\end{frame}
+
+%--------------------------------------------------
+\section{Понятие консенсуса}
+
+\begin{frame}
+\frametitle{Задача консенсуса}
+
+\begin{definitionbox}[Консенсус]
+$n$ процессов, каждый \textbf{предлагает} значение $v_i$.
+Все должны \textbf{принять решение} --- одно общее значение.
+\end{definitionbox}
+
+\vspace{0.4em}
+\textbf{Три свойства:}
+
+\begin{description}
+  \item[\textcolor{green!60!black}{Validity}]
+    Если все предложили одно $v$ --- решение равно $v$.\\
+    \textit{\small Защита от «тупого» алгоритма, который всегда возвращает 0.}
+  \item[\textcolor{blue!70!black}{Agreement}]
+    Все честные процессы принимают \emph{одинаковое} решение.\\
+    \textit{\small Суть задачи: никакого раскола.}
+  \item[\textcolor{orange!80!black}{Termination}]
+    Каждый честный процесс \emph{в итоге} принимает решение.\\
+    \textit{\small Алгоритм не зависает навечно.}
+\end{description}
+
+\vspace{0.3em}
+\begin{exampleblock}{Заметка}
+\small Иногда добавляют \textbf{Integrity}: решение обязано быть значением, которое предложил хотя бы один процесс (не «из воздуха»).
+\end{exampleblock}
+\end{frame}
+
+\begin{frame}
+\frametitle{Где консенсус встречается в жизни?}
+
+\begin{columns}[T]
+\column{0.5\textwidth}
+\begin{block}{Distributed commit (2PC)}
+  Все узлы БД должны решить: \textbf{COMMIT} или \textbf{ABORT}.\\
+  \small Если координатор --- единственная точка отказа, 2PC не даёт консенсуса при сбое координатора.
+\end{block}
+\vspace{0.3em}
+\begin{block}{State Machine Replication}
+  Реплики должны применять команды в \textbf{одном порядке}.\\
+  \small Иначе состояния разойдутся.
+\end{block}
+
+\column{0.4\textwidth}
+\begin{block}{Leader election}
+  Кто координатор прямо сейчас?\\
+  \small Два «лидера» одновременно --- катастрофа (split-brain).
+\end{block}
+\vspace{0.3em}
+\begin{block}{Блокчейн}
+  Какой блок следующий в цепочке?\\
+  \small Proof-of-Work, Proof-of-Stake --- всё это варианты консенсуса.
+\end{block}
+\end{columns}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Синхронный консенсус: \texorpdfstring{$f{+}1$}{f+1} раундов}
+
+\textbf{Алгоритм} (crash-stop, синхронная модель, $f$ возможных отказов):
+
+\begin{enumerate}
+  \item На каждом раунде $r = 1,\ldots,f{+}1$: каждый живой процесс рассылает \emph{всем} все значения, которые он узнал к этому моменту.
+  \item После $f{+}1$ раундов: взять $\min$ из всех известных значений (или любую детерминированную функцию).
+\end{enumerate}
+
+\vspace{0.2em}
+\begin{exampleblock}{Почему $f{+}1$ раундов достаточно?}
+В худшем случае каждый раунд «забирает» одну ноду ровно перед отправкой.
+За $f$ раундов могут упасть $f$ нод --- но их данные \emph{уже успели разойтись}.
+На раунде $f{+}1$ все живые узлы имеют одинаковую картину.
+\end{exampleblock}
+
+\vspace{0.2em}
+\textbf{Стоимость:} $O(n^2)$ сообщений за раунд $\Rightarrow$ $O(f \cdot n^2)$ всего.\\
+\small Дорого при больших $f$, но \emph{корректно}.
+
+\end{frame}
+
+%--------------------------------------------------
+\section{Алгоритмы консенсуса}
+
+\begin{frame}
+\frametitle{Почему асинхронный консенсус сложен?}
+
+\begin{columns}[T]
+\column{0.52\textwidth}
+\textbf{Дилемма алгоритма:}
+
+\vspace{0.3em}
+\begin{itemize}
+  \item \textbf{Ждать все ответы?}\\
+    Если нода упала --- зависнем навечно.\\
+    \textcolor{red}{Нарушение Termination.}
+  \vspace{0.4em}
+  \item \textbf{Не ждать всех?}\\
+    Разные процессы соберут разные наборы голосов и могут принять \emph{разные} решения.\\
+    \textcolor{red}{Нарушение Agreement.}
+\end{itemize}
+
+% \vspace{0.5em}
+% \begin{alertblock}{Ключевой факт}
+% Это \textbf{не сложность реализации} --- это фундаментальное ограничение. (FLP, следующий раздел)
+% \end{alertblock}
+
+\column{0.44\textwidth}
+\begin{tikzpicture}[node distance=0.7cm, font=\small,
+  msg/.style={-{Stealth},thick},
+  proc/.style={draw,rounded corners=2pt,minimum width=1.5cm,minimum height=0.45cm,align=center}
+]
+  \node[proc,fill=blue!15]  (c)  {Клиент};
+  \node[proc,fill=green!20,below=0.5cm of c,xshift=-1.75cm] (p1) {Нода 1};
+  \node[proc,fill=green!20,below=0.5cm of c]               (p2) {Нода 2};
+  \node[proc,fill=red!20,  below=0.5cm of c,xshift=1.75cm]  (p3) {Нода 3\\\tiny (упала?)};
+
+  \draw[msg] (c)  -- (p1);
+  \draw[msg] (c)  -- (p2);
+  \draw[msg,dashed,red] (c) -- (p3);
+
+  \draw[msg] (p1.south) -- ++(0,-0.35) node[below,font=\scriptsize] {OK};
+  \draw[msg] (p2.south) -- ++(0,-0.35) node[below,font=\scriptsize] {OK};
+  \node[font=\scriptsize,red] at (p3.south |- {(0,-1.85)}) {?};
+
+  \node[font=\scriptsize,align=center,text=red] at (0,-2.5)
+    {Ждать ответа от Нода\,3\\или нет?};
+\end{tikzpicture}
+\end{columns}
+\end{frame}
+
+% \begin{frame}
+% \frametitle{Карта алгоритмов консенсуса}
+
+% \begin{center}
+% \renewcommand{\arraystretch}{1.25}
+% \begin{tabular}{@{}lll@{}}
+% \toprule
+% \textbf{Алгоритм} & \textbf{Год} & \textbf{Ключевая идея} \\
+% \midrule
+% Viewstamped Replication & 1988 & Исторически первый, лидер + лог \\
+% \textbf{Paxos} & 1989/98 & Классика, кворумы, фазы Prepare/Accept \\
+% Multi-Paxos & --- & Paxos для последовательности значений \\
+% \textbf{Raft} & 2014 & «Paxos, но понятный»; явный лидер \\
+% PBFT & 1999 & Byzantine-отказы; $O(n^2)$ сообщений \\
+% Ben-Or & 1983 & Рандомизация монеткой; обходит FLP \\
+% \bottomrule
+% \end{tabular}
+% \end{center}
+
+% \vspace{0.3em}
+% \begin{block}{На следующем семинаре}
+% Paxos и Raft --- подробно: фазы, edge-кейсы, реализации.\\
+% Сегодня: \emph{зачем} они нужны и общая идея --- \textbf{лидер + кворум}.
+% \end{block}
+
+% \vspace{0.2em}
+% \textbf{Общая схема лидер-based алгоритмов:}
+% \begin{enumerate}
+%   \item Выбрать лидера (снова консенсус!)
+%   \item Лидер собирает кворум и предлагает значение
+%   \item Если лидер упал --- выбрать нового
+% \end{enumerate}
+% \end{frame}
+
+\begin{frame}
+\frametitle{Кворумы: большинство как инструмент}
+
+\begin{columns}[T]
+\column{0.45\textwidth}
+\textbf{Почему $\lfloor n/2 \rfloor + 1$?}
+
+\vspace{0.4em}
+Любые два кворума \textbf{пересекаются} хотя бы в одном узле.
+Этот узел «помнит» предыдущее решение --- не даёт двум лидерам принять разные значения.
+
+\vspace{0.5em}
+\begin{exampleblock}{Аналогия}
+У вас 5 копий ключа от сейфа. Чтобы открыть --- нужно 3. Любые две группы по 3 человека \emph{обязательно} пересекаются.
+\end{exampleblock}
+
+\column{0.5\textwidth}
+\begin{tikzpicture}[scale=0.5,
+  nd/.style={circle,draw,minimum size=0.65cm,font=\small,thick}]
+
+  % 5 nodes in a circle
+  \foreach \i/\lbl in {90/1, 18/2, 306/3, 234/4, 162/5} {
+    \node[nd] (\lbl) at ({2.0*cos(\i)},{2.0*sin(\i)}) {\lbl};
+  }
+
+  % quorum A: 1,2,3 -- blue ellipse
+  \begin{scope}[on background layer]
+    \node[draw=blue!60,fill=blue!10,ellipse,
+          fit=(1)(2)(3),inner sep=3pt,rotate=30,
+          label={[blue!70,font=\scriptsize]above right:кворум A}] {};
+  \end{scope}
+
+  % quorum B: 1,4,5 -- orange ellipse
+  \begin{scope}[on background layer]
+    \node[draw=orange!70,fill=orange!10,ellipse,
+          fit=(1)(4)(5),inner sep=3pt,rotate=-40,
+          label={[orange!80,font=\scriptsize]below left:кворум B}] {};
+  \end{scope}
+
+  % highlight intersection node
+  \node[nd,fill=green!40,thick] at (1) {1};
+  \node[font=\scriptsize,green!50!black] at (0,2.7) {пересечение};
+  \draw[-{Stealth},green!50!black,thick] (0,2.55) -- (0.15,2.15);
+\end{tikzpicture}
+\end{columns}
+
+\vspace{0.4em}
+\small Работает при $f < n/2$ crash-stop отказов.
+\end{frame}
+
+%--------------------------------------------------
+\section{FLP-теорема}
+
+\begin{frame}
+\frametitle{FLP: невозможность консенсуса}
+
+\begin{alertblock}{Теорема (Fischer, Lynch, Paterson, 1985)}
+В \textbf{полностью асинхронной} системе, где хотя бы \textbf{один} процесс может
+упасть (crash-stop), не существует \emph{детерминированного} алгоритма консенсуса,
+который \emph{всегда завершается}.
+\end{alertblock}
+
+\vspace{0.5em}
+Иными словами: \textbf{Safety} (Agreement) и \textbf{Liveness} (Termination) ---
+нельзя гарантировать одновременно в асинхронной модели при наличии отказов.
+
+\end{frame}
+
+% \begin{frame}
+% \frametitle{Интуиция доказательства FLP}
+
+% \textbf{Ключевое понятие:} конфигурация системы (состояния всех процессов + очередь сообщений).
+
+% \vspace{0.3em}
+% \begin{description}
+%   \item[Univalent-0 / Univalent-1] Исход \emph{уже предрешён}: решение будет 0 (или 1), что бы ни случилось дальше.
+%   \item[Bivalent] Оба исхода ещё \emph{возможны} --- система «в подвешенном состоянии».
+% \end{description}
+
+% \vspace{0.3em}
+% \begin{block}{Идея доказательства (два шага)}
+% \begin{enumerate}
+%   \item \textbf{Начальная конфигурация бивалентна.}\\
+%     \small Если все предложили 0 --- решение 0; если все 1 --- решение 1. Где-то посередине есть «граничная» начальная конфигурация, которая бивалентна.
+%   \vspace{0.2em}
+%   \item \textbf{Adversary-планировщик всегда держит систему бивалентной.}\\
+%     \small Из любой бивалентной конфигурации можно сделать следующий шаг так, чтобы остаться бивалентной --- задержав сообщение «нужного» процесса. Алгоритм никогда не «решает».
+% \end{enumerate}
+% \end{block}
+
+% \end{frame}
+
+\begin{frame}
+\frametitle{FLP на практике: приговор или руководство?}
+
+FLP говорит об \emph{асинхронной} модели с \emph{детерминированным} алгоритмом.
+Оба ограничения можно ослабить:
+
+\vspace{0.3em}
+\begin{enumerate}
+  \item \textbf{Частичная синхронность} (GST-модель, Dwork--Lynch--Stockmeyer)\\
+    \small После некоторого момента $\mathit{GST}$ сеть ведёт себя синхронно.\\
+    Paxos и Raft завершаются \emph{в периоды стабильности}.
+
+  \vspace{0.3em}
+  \item \textbf{Рандомизация} (Ben-Or 1983)\\
+    \small «Монетка» делает алгоритм не детерминированным.\\
+    Консенсус достигается с вероятностью 1 --- но не в худшем случае.
+
+  \vspace{0.3em}
+  \item \textbf{Failure Detectors} (Chandra--Toueg 1996)\\
+    \small Добавить оракул, который \emph{иногда неточно} детектирует отказы.\\
+    Класс $\Omega$ (eventually perfect leader detector) достаточен для консенсуса.
+\end{enumerate}
+
+\end{frame}
+
+% %--------------------------------------------------
+% \section{ABD-протокол}
+
+% \begin{frame}
+% \frametitle{ABD: атомарные регистры без консенсуса}
+
+% \textbf{Задача:} реализовать линеаризуемый (атомарный) read/write регистр
+% в \emph{асинхронной} системе с crash-stop отказами.
+
+% \vspace{0.3em}
+% \begin{columns}[T]
+% \column{0.55\textwidth}
+% \begin{exampleblock}{Attiya, Bar-Noy, Dolev (1995)}
+% \small Регистр реплицируется на $n$ нодах. Операции Write и Read завершаются за 2 раунда. Корректно при $f < n/2$ отказов.
+% \end{exampleblock}
+
+% \vspace{0.4em}
+% \textbf{Чем отличается от консенсуса?}\\
+% \small Здесь не нужно навсегда согласиться на одном значении --- нужно лишь, чтобы чтения и записи \emph{выглядели} последовательными (linearizable).
+
+% \vspace{0.3em}
+% \textbf{Это \emph{слабее} консенсуса!}\\
+% \small Консенсус $\Rightarrow$ атомарный регистр,\\но регистр $\not\Rightarrow$ консенсус (в общем случае).
+
+% \column{0.42\textwidth}
+% \textbf{Зачем нужно:}
+% \begin{itemize}
+%   \item Репликация в БД
+%   \item Distributed key-value хранилище
+%   \item Distributed shared memory
+% \end{itemize}
+
+% \vspace{0.4em}
+% \begin{alertblock}{Связь с FLP}
+% \small ABD \textbf{решаем} в асинхронной модели! Потому что атомарный регистр $\neq$ консенсус.
+% \end{alertblock}
+% \end{columns}
+% \end{frame}
+
+% \begin{frame}
+% \frametitle{ABD: алгоритм записи}
+
+% \textbf{Модель:} $n$ реплик, каждая хранит пару $(\mathit{val},\ \mathit{tag})$, где $\mathit{tag} = (\mathit{ts},\ \mathit{writer\_id})$.
+
+% \vspace{0.3em}
+% \begin{block}{WRITE($v$) --- два раунда}
+% \begin{enumerate}
+%   \item \textbf{Read-phase:} спросить кворум о текущем максимальном теге $\Rightarrow$ получить $\mathit{max\_tag}$.
+%   \item \textbf{Write-phase:} записать $(v,\ \mathit{max\_tag}{+}1)$ на кворум $\Rightarrow$ ждать подтверждения.
+% \end{enumerate}
+% \end{block}
+
+% \vspace{0.1em}
+% \small Зачем Read-phase? Чтобы не затереть более свежее значение: нужно взять тег \emph{строго выше} всех существующих.
+
+% \vspace{0.3em}
+% \begin{center}
+% \begin{tikzpicture}[
+%   nd/.style={draw,rounded corners=3pt,minimum width=1.3cm,minimum height=0.5cm,
+%              align=center,font=\scriptsize},
+%   arr/.style={-{Stealth},thick,font=\scriptsize},
+%   scale=0.88, transform shape
+% ]
+%   \node[nd,fill=blue!15] (cl) at (0,0) {Клиент};
+%   \node[nd,fill=green!20] (r1) at (-2.5,-1.6) {Реплика 1};
+%   \node[nd,fill=green!20] (r2) at (0,-1.6)    {Реплика 2};
+%   \node[nd,fill=green!20] (r3) at (2.5,-1.6)  {Реплика 3};
+
+%   % Phase 1
+%   \draw[arr,blue!60,bend right=8] (cl) to node[left,blue!60]{1. read\_tag} (r1);
+%   \draw[arr,blue!60]              (cl) -- node[left,blue!60]{} (r2);
+%   \draw[arr,blue!60,bend left=8]  (cl) to (r3);
+%   \draw[arr,blue!60,dashed,bend right=8] (r1) to node[right,blue!60]{\tiny max\_tag} (cl);
+%   \draw[arr,blue!60,dashed]              (r2) to (cl);
+
+%   % Phase 2
+%   \draw[arr,orange!80,bend right=10,transform canvas={yshift=-2pt}]
+%     (cl) to node[below left,orange!80,font=\tiny]{2. write(v, tag+1)} (r1);
+%   \draw[arr,orange!80,transform canvas={yshift=-2pt}]
+%     (cl) -- (r2);
+%   \draw[arr,orange!80,bend left=10,transform canvas={yshift=-2pt}]
+%     (cl) to (r3);
+
+%   \node[font=\tiny,orange!70] at (0,-2.55) {ждём подтверждения от кворума (2 из 3)};
+% \end{tikzpicture}
+% \end{center}
+% \end{frame}
+
+% \begin{frame}
+% \frametitle{ABD: алгоритм чтения и корректность}
+
+% \begin{block}{READ() --- два раунда}
+% \begin{enumerate}
+%   \item \textbf{Фаза 1:} спросить кворум $\Rightarrow$ собрать все $(v_i,\ \mathit{tag}_i)$ $\Rightarrow$ взять $(v^*,\ \mathit{tag}^*)$ с максимальным тегом.
+%   \item \textbf{Write-back:} записать $(v^*,\ \mathit{tag}^*)$ на кворум $\Rightarrow$ ждать подтверждения.
+%   \item Вернуть $v^*$.
+% \end{enumerate}
+% \end{block}
+
+% \vspace{0.2em}
+% \textbf{Зачем Write-back?}\\
+% \small Без него: читатель видит свежее значение у одной реплики, но другой читатель может уже не увидеть --- кворумы пересекаются, но «свежее» значение ещё не у всех. Write-back гарантирует: после чтения следующий читатель \emph{тоже} увидит это значение.
+
+% \vspace{0.3em}
+% \textbf{Почему корректно:} теги полностью упорядочены $\Rightarrow$ операция с большим тегом «позже». Кворумы пересекаются $\Rightarrow$ любой читатель видит ноду с последним записанным тегом.
+
+% \vspace{0.2em}
+% \textbf{Ограничения ABD:}
+% \begin{itemize}
+%   \item Базовая версия: \textbf{один писатель}; multi-writer требует тегов вида $(\mathit{ts},\ \mathit{writer\_id})$.
+%   \item Только read/write: \textbf{нельзя} реализовать compare-and-swap без консенсуса.
+%   \item 2 раунда на операцию --- дополнительная задержка.
+% \end{itemize}
+% \end{frame}
+
+\section{Алгоритм консенсуса RAFT}
+
+\begin{frame}
+\frametitle{Демо}
+
+Презентация – Мартин Клеппманн
+
+\href{https://thesecretlivesofdata.com/raft/}{https://thesecretlivesofdata.com/raft/}
+
+\end{frame}
+
+\section{Дискуссия}
+
+
+\begin{frame}
+\frametitle{Итоги}
+
+\begin{itemize}
+  \item \textbf{Модели систем:} синхронная / асинхронная / частично-синхронная;
+    иерархия отказов от crash-stop до Byzantine.
+  \item \textbf{Консенсус} --- три свойства: Validity, Agreement, Termination.
+    В синхронной модели решается за $f{+}1$ раундов; в асинхронной --- нетривиально.
+  \item \textbf{Алгоритмы:} кворумы + лидер --- общая идея Paxos, Raft и других.
+    Paxos и Raft подробно --- на следующем семинаре.
+  \item \textbf{FLP (1985):} в полностью асинхронной системе детерминированный консенсус
+    \emph{невозможен}. Обходы: частичная синхронность, рандомизация, failure detectors.
+  % \item \textbf{ABD (1995):} линеаризуемый регистр --- \emph{слабее} консенсуса и решаем
+  %   в асинхронной модели. Write использует read-phase + write-phase;
+  %   Read добавляет write-back для гарантии линеаризуемости.
+\end{itemize}
+
+\end{frame}
+
+\end{document}
