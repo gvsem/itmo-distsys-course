@@ -23,6 +23,8 @@
 
 > - [M. Fischer, N. Lynch, M. Paterson – Impossibility of Distributed Consensus with One Faulty Process](https://www.cs.princeton.edu/courses/archive/spr22/cos418/papers/flp.pdf) (FLP-теорема)
 
+> - [The Hadoop Distributed File System](https://pages.cs.wisc.edu/~akella/CS838/F15/838-CloudPapers/hdfs.pdf) (Hadoop)
+
 ### Классические учебники
 
 > - A. Tanenbaum, M. van Steen – Distributed Systems: Principles and Paradigms
