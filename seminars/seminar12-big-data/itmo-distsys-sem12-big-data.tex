@@ -1,0 +1,117 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+
+% pdflatex
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[russian,english]{babel}
+\usepackage{cmap}
+\usepackage{babel}
+
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{array}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,backgrounds,calc,decorations.pathreplacing}
+
+% Footline: show current section (left) and frame numbers (right)
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.78\paperwidth,ht=2.5ex,dp=1ex,left]{author in head/foot}%
+      \hspace*{1em}\usebeamerfont{footline}\insertsectionhead%
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.22\paperwidth,ht=2.5ex,dp=1ex,right]{date in head/foot}%
+      \usebeamerfont{footline}\insertframenumber{} / \inserttotalframenumber\hspace*{1em}%
+    \end{beamercolorbox}%
+  }%
+}
+
+\newcommand{\parpause}[1]{\only<+->{#1\par}}
+\newenvironment{definitionbox}[1][Определение]{%
+  \begin{exampleblock}{#1}
+}{%
+  \end{exampleblock}
+}
+
+\AtBeginSection[]
+{
+  \begin{frame}
+    \frametitle{Содержание}
+    \tableofcontents[currentsection]
+  \end{frame}
+}
+
+\title{Семинар 12. Хранение и обработка больших данных}
+\subtitle{Распределенные вычисления}
+\author{Георгий Семенов}
+\institute{Институт прикладных компьютерных наук \\ Университет ИТМО}
+\date{весна 2026}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+
+\frametitle{Организационные моменты}
+
+\begin{itemize}
+  \item Сегодня – (14 мая, 23:59) дедлайн по домашнему заданию 
+  \item Последнее пятое домашнее задание - YTsaurus и MapReduce
+  \begin{itemize}
+    \item Дедлайн – 28 мая, 23:59, в тот же день - последний семинар
+    \item Задание без автотестов, с ручной проверкой
+    \item Детальная разбалловка находится в README.MD
+  \end{itemize}
+  \item Что делать, чтобы закрыться?
+  \begin{itemize}
+    \item Делать домашние задания со штрафом 50\%, чтобы набрать 60\% от общего количества баллов на тройку (и написать мне о том, что можно проверять)
+    \item Если не получается добрать баллы, то для желающих будет устный экзамен
+  \end{itemize}
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+
+\frametitle{Что обсуждаем сегодня?}
+
+\begin{itemize}
+  \item Что такое большие данные? (внешняя презентация)
+  \item Что такое Hadoop и MapReduce-задачи? (внешняя презентация)
+  \item Смотрим YTsaurus
+\end{itemize}
+
+\end{frame}
+
+% что такое большие данные (нереляционный мир)
+% хранение больших данных (DFS, файлы - какие структуры данных, Apache Parquet, Vero, ...)
+% обработка больших данных (batch vs. stream, MapReduce, Spark, Flink, ...)
+% Hadoop
+% YTsaurus (статические и динамические таблицы)
+
+% Протоколы аутентификации
+
+% DIE = Distributed 
+
+% https://www.copado.com/resources/blog/making-die-model-security-vs-the-cia-security-triad-complementary-not-competitive
+% https://www.linkedin.com/pulse/cyber-security-fundamentals-cia-triad-aaa-bio-key-international
+
+
+\begin{frame}
+\frametitle{Итоги}
+
+\begin{itemize}
+    \item Сегодня дедлайн по домашнему заданию 4 (Raft)
+    \item Выдано последнее домашнее задание 5 (YTsaurus и MapReduce)
+    \item Осталось два семинара
+\end{itemize}
+
+\end{frame}
+
+\end{document}
